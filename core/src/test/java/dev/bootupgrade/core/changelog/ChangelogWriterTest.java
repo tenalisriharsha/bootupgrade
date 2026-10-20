@@ -69,4 +69,29 @@ class ChangelogWriterTest {
                 .contains("2 total steps")
                 .contains("### Changes");
     }
+
+    @Test
+    void renderChangelogCoversAnAgentFixStepAfterARedBuild() {
+        UpgradeRun run = UpgradeRun.start("run-3", "legacy-security-service", "8", "21", "2.7.18", "3.0.13", "bootupgrade/run-3");
+        UpgradeStep recipe = UpgradeStep.start("s1", "Apply OpenRewrite recipes", StepKind.RECIPE, "javax->jakarta")
+                .markSucceeded("3 files changed");
+        UpgradeStep build = UpgradeStep.start("s2", "Build check", StepKind.BUILD_CHECK, "mvn clean verify")
+                .markFailed("BUILD FAILURE (exit 1), 1 tests run, 0 failed, 1 errored");
+        UpgradeStep agentFix = UpgradeStep.start("s3", "LLM agent fix loop", StepKind.AGENT_FIX,
+                        "tool-limited agent (read_file/write_file/run_build) attempting to fix the failing build")
+                .markSucceeded("build fixed after 3 agent iteration(s) [read_file(path=SecurityConfig.java) -> ok; "
+                        + "write_file(path=SecurityConfig.java) -> ok; run_build -> ok]");
+        run = run.withStep(recipe).withStep(build).withStep(agentFix).withStatus(RunStatus.SUCCEEDED);
+
+        String changelog = ChangelogWriter.renderChangelog(run);
+        String prDescription = ChangelogWriter.renderPrDescription(run);
+
+        assertThat(changelog)
+                .contains("SUCCEEDED] AGENT_FIX — LLM agent fix loop")
+                .contains("build fixed after 3 agent iteration(s)");
+        assertThat(prDescription)
+                .contains("2 succeeded")
+                .contains("0 failed")
+                .contains("3 total steps");
+    }
 }
