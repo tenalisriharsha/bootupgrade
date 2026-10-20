@@ -6,6 +6,7 @@ import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.revwalk.RevCommit;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -30,6 +31,7 @@ public final class GitOperations {
             return;
         }
         try (Git git = Git.init().setDirectory(repoPath.toFile()).call()) {
+            excludeBuildOutput(repoPath);
             git.add().addFilepattern(".").call();
             git.commit()
                     .setMessage("Initial commit")
@@ -45,6 +47,7 @@ public final class GitOperations {
     public void createBranch(Path repoPath, String branchName) {
         Objects.requireNonNull(repoPath, "repoPath must not be null");
         Objects.requireNonNull(branchName, "branchName must not be null");
+        excludeBuildOutput(repoPath);
         try (Git git = Git.open(repoPath.toFile())) {
             git.checkout().setCreateBranch(true).setName(branchName).call();
         } catch (IOException | GitAPIException e) {
@@ -90,6 +93,23 @@ public final class GitOperations {
             return Optional.of(commit.getName());
         } catch (IOException | GitAPIException e) {
             throw new GitOperationException("Failed to commit at " + repoPath, e);
+        }
+    }
+
+    /**
+     * Keeps Maven build output ({@code target/}) out of every commit this tool makes, even in projects without a
+     * {@code .gitignore}. Uses the repository-local {@code .git/info/exclude}, so the user's tree is not modified.
+     */
+    private static void excludeBuildOutput(Path repoPath) {
+        try {
+            Path exclude = repoPath.resolve(".git").resolve("info").resolve("exclude");
+            Files.createDirectories(exclude.getParent());
+            String existing = Files.exists(exclude) ? Files.readString(exclude) : "";
+            if (existing.lines().noneMatch(line -> line.strip().equals("target/"))) {
+                Files.writeString(exclude, existing + (existing.isEmpty() || existing.endsWith("\n") ? "" : "\n") + "target/\n");
+            }
+        } catch (IOException e) {
+            throw new GitOperationException("Failed to configure build-output exclusion at " + repoPath, e);
         }
     }
 }

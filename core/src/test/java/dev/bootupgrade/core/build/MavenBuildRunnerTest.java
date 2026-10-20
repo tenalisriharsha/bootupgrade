@@ -80,4 +80,24 @@ class MavenBuildRunnerTest {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> runner.run(repoPath));
     }
+
+    @Test
+    void parsesTheInfoPrefixedSummaryThatRealMavenPrints() {
+        String output = """
+                [INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s - in demo.WidgetServiceTest
+                [INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.764 s - in demo.WidgetControllerTest
+                [INFO]
+                [INFO] Results:
+                [INFO]
+                [INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0
+                [INFO] BUILD SUCCESS
+                """;
+        FakeProcessRunner processRunner = new FakeProcessRunner(new ProcessResult(0, output, "", false));
+
+        BuildResult result = new MavenBuildRunner(processRunner, "mvn", java.time.Duration.ofMinutes(1))
+                .runVerify(java.nio.file.Path.of("/tmp/demo"));
+
+        assertThat(result.testsRun()).isEqualTo(13);
+        assertThat(result.success()).isTrue();
+    }
 }
