@@ -139,6 +139,52 @@ bootupgrade/
   scripted to read `SecurityConfig.java`, write the corrected version, and
   rerun the build — ending in a genuinely green `mvn clean verify`.
 
+### API + Dashboard (Phase 4)
+
+- `api` is a standalone Spring Boot 3 Maven project — intentionally no
+  compile-time dependency on `core` (a pipeline run reports into it over
+  HTTP, not an in-process call). `UpgradeRunEntity`/`UpgradeStepEntity` are
+  mutable JPA entities mirroring the shape of `core`'s immutable records;
+  `RunStatus`/`StepStatus`/`StepKind` are duplicated as independent enums
+  for the same reason.
+- `UpgradeRunService` owns id generation, request→entity mapping, and the
+  success-rate aggregation (grouped by `repositoryName`, computed from
+  `RunStatus` counts) — `UpgradeRunController` stays a thin HTTP layer over
+  it. Four endpoints: `POST /api/runs` (record a run + its steps),
+  `GET /api/runs` (list, newest first), `GET /api/runs/{id}` (full detail),
+  `GET /api/runs/stats/success-rate` (overall + per-repo).
+- Default Spring profile uses H2 in-memory (works standalone, no setup); a
+  `prod` profile swaps in Postgres driven entirely by `DB_URL`/
+  `DB_USERNAME`/`DB_PASSWORD` env vars, for the ECS task Phase 5 will
+  define — never applied against a real database from this repo.
+- Entity, service, and controller tests all run against the real H2
+  in-memory database (no mocking of the persistence layer), including a
+  full `MockMvc` pass through `POST` → `GET` list → `GET` detail →
+  success-rate for a seeded run.
+- `dashboard` is a standalone Angular 18 app (standalone components, no
+  NgModules) with two routed views: a runs list (`RunsListComponent`) and
+  a run detail (`RunDetailComponent`), both driven by `UpgradeRunService`
+  (`HttpClient`) against `environment.apiBaseUrl`. A `StatusBadgeComponent`
+  renders every run/step status as an icon + label pill (status color
+  reserved per the dataviz palette's good/warning/critical roles, never
+  color alone). `SuccessRateComponent` renders the overall rate as a hero
+  stat tile plus a proportional stacked bar per repository
+  (succeeded/partial/failed segments), with a legend since it's more than
+  one series.
+- `karma.conf.js` pins `ChromeHeadlessCI` (`--no-sandbox --disable-gpu`,
+  `singleRun: true`) so `npm test` runs headless and exits on its own —
+  no manual browser flags needed locally or in CI.
+- Angular unit tests mock `UpgradeRunService` at the component level (no
+  real HTTP) and test the service itself against
+  `HttpClientTestingModule`; 17/17 green. CI gained two new jobs (`api`,
+  `dashboard`) alongside `core` and `samples`.
+- Proven against a live pair, not just unit tests: the API and dashboard
+  dev servers were started locally, seeded with five realistic runs across
+  the three sample repos (clean recipe-only success, an agent-fix attempt
+  still failing, an agent fix that succeeds, and a run that exhausts its
+  iteration cap and reports `FAILED` honestly), and every resulting view
+  was screenshotted and eyeballed — see the README's Preview section.
+
 ## Build Plan
 
 This project is built across **5 sessions**. Each session is a full working
@@ -204,16 +250,16 @@ session, not a quick pass — foundation first, polish and previews last.
       integration test
 - [x] Tests green, conventional commits, PROGRESS.md updated
 
-### Phase 4 — API + Dashboard (Session 4)
-- [ ] `api`: Spring Boot 3 REST API persisting `UpgradeRun`/`UpgradeStep`
+### Phase 4 — API + Dashboard (Session 4) ✅
+- [x] `api`: Spring Boot 3 REST API persisting `UpgradeRun`/`UpgradeStep`
       (Spring Data JPA; H2 in-memory for tests, Postgres driver for prod — no
       Testcontainers/Docker)
-- [ ] API endpoints: list runs, run detail (steps + diffs), success-rate
+- [x] API endpoints: list runs, run detail (steps + diffs), success-rate
       aggregation across repos
-- [ ] `dashboard`: Angular app — runs list, run detail view (steps, diffs),
+- [x] `dashboard`: Angular app — runs list, run detail view (steps, diffs),
       success-rate summary, calling the API
-- [ ] API integration tests (in-memory DB) and Angular unit tests
-- [ ] Tests green, conventional commits, PROGRESS.md updated
+- [x] API integration tests (in-memory DB) and Angular unit tests
+- [x] Tests green, conventional commits, PROGRESS.md updated
 
 ### Phase 5 — Infra, Polish & Ship (Session 5)
 - [ ] Terraform (`infra`): ECS Fargate (api), RDS (Postgres), S3 + CloudFront
@@ -222,42 +268,61 @@ session, not a quick pass — foundation first, polish and previews last.
       account
 - [ ] CI workflow green end to end across all modules
 - [ ] Full test suite green across `core`, `api`, `dashboard`
-- [ ] Capture ≥4-5 real screenshots (dashboard views + CLI runs) into
+- [x] Capture ≥4-5 real screenshots (dashboard views + CLI runs) into
       `docs/screenshots/`, verified by eye, embedded in README's Preview section
-- [ ] README finalized with Preview section
+      — done early in Session 4 since the dashboard's visible surface was
+      already built; revisit only if the UI changes meaningfully in Session 5
+- [x] README Preview section in place (done in Session 4, alongside the
+      screenshots above) — revisit wording once Phase 5 content lands
 - [ ] `DAILY_REPORT.md` written summarizing the build
 - [ ] `STATUS: COMPLETE` below
 
 ## Resume point
 
-**Session 3 complete.** Phase 3 is fully done: `core/agent` (`AgentTool`,
-`ReadFileTool`, `WriteFileTool`, `RunBuildTool`, `AgentFixLoop`,
-`AgentFixResult`) is implemented and tested, `UpgradePipeline` wires it in
-as the fallback via a new 4-arg constructor (the old 3-arg one still works
-unchanged, agent disabled), and `legacy-security-service` is upgraded
-end-to-end through recipes → still-red build → agent fix → green build in
-a real (no-fakes-but-the-LLM) integration test. `core` is at 103/103 tests
-green. CI is unchanged (already runs `core` plus all 3 samples; the new
-agent tests and the new integration test run as part of `mvn test`).
+**Session 4 complete.** Phase 4 is fully done: `api` (Spring Boot 3, H2
+default / Postgres `prod` profile, no dependency on `core`) persists runs
+and steps and serves list/detail/success-rate endpoints, 10/10 tests green
+against a real in-memory DB. `dashboard` (Angular 18, standalone
+components) has a runs list with a success-rate summary and a run-detail
+view, both calling the API; 17/17 unit tests green headless via
+`ChromeHeadlessCI` (`karma.conf.js`, `singleRun: true`). `core` is still at
+103/103 (unchanged this session). CI gained `api` and `dashboard` jobs
+alongside `core` and `samples` — 4 jobs total. The visible surface was
+screenshotted against a live, seeded api+dashboard pair and embedded in
+the README's Preview section already (5 screenshots, all verified by eye)
+— that item does not need to be repeated in Session 5 unless the UI
+changes meaningfully.
 
-**Start session 4 here:**
-1. `cd core && mvn test` to confirm the Phase 3 baseline is still green
-   (should be well under a minute including both real integration tests,
-   since Maven Central deps are already cached under `~/.m2`).
-2. Build the `api` module: Spring Boot 3 REST API persisting `UpgradeRun`/
-   `UpgradeStep` via Spring Data JPA. Use H2 in-memory for tests and the
-   Postgres driver for prod config — no Testcontainers/Docker (the daemon
-   isn't running in this environment). `core`'s `UpgradeRun`/`UpgradeStep`/
-   `RunStatus`/`StepStatus`/`StepKind` records are the shape to persist;
-   decide whether the API maps them to JPA `@Entity` classes directly or
-   via separate DTOs (records with constructor validation don't map
-   cleanly to JPA's no-arg-constructor expectation, so entities will likely
-   need their own mutable classes with a mapper to/from the `core` records).
-3. API endpoints per the Phase 4 checklist: list runs, run detail (steps +
-   diffs), success-rate aggregation across repos.
-4. Build the `dashboard` Angular app: runs list, run detail view (steps,
-   diffs), success-rate summary, calling the API.
-5. API integration tests against the in-memory H2 DB, Angular unit tests.
-6. Tests green, conventional commits, PROGRESS.md updated.
+**Start session 5 here — this is the last session, everything must finish:**
+1. Confirm the baseline is still green:
+   - `cd core && mvn test` (103 tests)
+   - `cd api && mvn test` (10 tests, real H2)
+   - `cd dashboard && CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npx ng test --no-watch --no-progress` (17 tests headless) — or just `npm test`, since `karma.conf.js` now pins `ChromeHeadlessCI` and `singleRun: true`; only set `CHROME_BIN` if Karma can't auto-locate Chrome.
+2. Build `infra/`: Terraform for ECS Fargate (running the `api` container),
+   RDS Postgres (the `prod` profile's `DB_URL`/`DB_USERNAME`/`DB_PASSWORD`
+   targets), and S3 + CloudFront (serving the `dashboard` production
+   build). Validate with `terraform fmt`, `terraform validate`, and
+   `terraform plan` against a mock/local backend — and `terraform test`
+   with `mock_provider` for any logic worth unit-testing (e.g. naming,
+   tagging, security-group rules). **Never run `terraform apply` or any
+   real AWS CLI/SDK call** — only dummy credentials exist in this
+   environment.
+3. Make sure the CI workflow (`.github/workflows/ci.yml`) is green end to
+   end across all four jobs (`core`, `samples`, `api`, `dashboard`) — add a
+   `terraform fmt -check`/`validate` CI job if time allows, matching the
+   validation approach above (no `apply`).
+4. Re-run the full test suite across every module one more time and fix
+   anything red.
+5. Decide whether the dashboard/API screenshots need re-capturing — only
+   if their UI changed meaningfully since Session 4 (Terraform work has no
+   visible surface, so likely no re-capture is needed this session).
+6. Finalize `README.md` (status, repository layout, building instructions
+   all current) and write `DAILY_REPORT.md` summarizing what was built
+   across all 5 sessions, full test results, known limitations (no real
+   AWS deploy exercised, no live LLM wired up beyond `FakeLlmClient`,
+   dashboard has no auth), and future ideas (real `LlmClient` backed by an
+   actual API, CLI→API reporting wired end-to-end, auth on the API/
+   dashboard, richer diff rendering).
+7. Set `STATUS: COMPLETE` below once everything above is done and green.
 
 STATUS: IN_PROGRESS
