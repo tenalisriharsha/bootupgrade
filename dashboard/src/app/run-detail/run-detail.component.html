@@ -1,0 +1,35 @@
+<div class="page">
+  <a routerLink="/" class="back-link">← All runs</a>
+
+  <p *ngIf="loading" class="muted">Loading run…</p>
+  <p *ngIf="notFound" class="error">Run not found.</p>
+
+  <ng-container *ngIf="run">
+    <header class="run-header">
+      <h1>{{ run.repositoryName }}</h1>
+      <app-status-badge [status]="run.status"></app-status-badge>
+    </header>
+
+    <dl class="meta-grid">
+      <div><dt>Branch</dt><dd><code>{{ run.branchName }}</code></dd></div>
+      <div><dt>Java</dt><dd>{{ run.sourceJavaVersion }} → {{ run.targetJavaVersion }}</dd></div>
+      <div><dt>Spring Boot</dt><dd>{{ run.sourceSpringBootVersion }} → {{ run.targetSpringBootVersion }}</dd></div>
+      <div><dt>Created</dt><dd>{{ run.createdAt | date: 'MMM d, y HH:mm:ss' }}</dd></div>
+    </dl>
+
+    <h2>Steps</h2>
+    <ol class="steps">
+      <li *ngFor="let step of run.steps" class="step">
+        <div class="step-top">
+          <span class="step-kind">{{ step.kind }}</span>
+          <strong>{{ step.name }}</strong>
+          <app-status-badge [status]="step.status"></app-status-badge>
+        </div>
+        <p class="step-description">{{ step.description }}</p>
+        <pre *ngIf="step.diffSummary" class="diff-summary">{{ step.diffSummary }}</pre>
+      </li>
+    </ol>
+
+    <p *ngIf="!run.steps.length" class="muted">This run has no recorded steps.</p>
+  </ng-container>
+</div>

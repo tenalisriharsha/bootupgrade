@@ -1,0 +1,99 @@
+.rate-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+}
+
+.hero {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.hero-number {
+  font-size: 2.75rem;
+  font-weight: 700;
+  color: var(--success-text);
+  line-height: 1;
+}
+
+.hero-caption {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.hero-sub {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.legend {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.repo-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.repo-row {
+  display: grid;
+  grid-template-columns: 11rem 1fr 3.5rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.repo-name {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-track {
+  display: flex;
+  height: 10px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--gridline);
+  gap: 2px;
+}
+
+.bar-segment {
+  height: 100%;
+  border-radius: 4px;
+}
+
+.repo-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}

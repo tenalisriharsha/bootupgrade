@@ -39,3 +39,37 @@ jobs:
       - name: Build and test ${{ matrix.sample }}
         working-directory: samples/${{ matrix.sample }}
         run: mvn -B test
+
+  api:
+    name: api (Java 21)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Build and test api
+        working-directory: api
+        run: mvn -B test
+
+  dashboard:
+    name: dashboard (Angular)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - name: Install dependencies
+        working-directory: dashboard
+        run: npm ci
+      - name: Run unit tests
+        working-directory: dashboard
+        run: npm test
+      - name: Production build
+        working-directory: dashboard
+        run: npx ng build
