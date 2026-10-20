@@ -25,9 +25,9 @@ This project is being built across 5 working sessions, in public. See
 **[PROGRESS.md](PROGRESS.md)** for the full architecture, the phased build
 plan, and exactly where the project currently stands.
 
-**Current phase: Phase 2 — Upgrade Engine, complete.** On top of the Phase 1
-domain model, the `core` module now has a real recipe → build-check
-pipeline:
+**Current phase: Phase 3 — LLM Agent Loop, complete.** On top of the Phase 2
+recipe → build-check pipeline, `core` now has the tool-limited LLM agent
+fallback that closes the gap recipes can't:
 
 - `core/recipes` runs the actual `rewrite-maven-plugin` (the
   `UpgradeSpringBoot_3_0` composite recipe) against a target repository —
@@ -37,19 +37,29 @@ pipeline:
   summary out of its output.
 - `core/git` (via JGit, no shell `git` dependency) creates the upgrade
   branch and commits each step's changes.
-- `core/pipeline` wires them together: apply recipes, commit, build-check,
-  and report `SUCCEEDED`/`PARTIAL`/`FAILED` honestly — a build that's still
-  red after the recipes is never reported as a success. (Closing that gap
-  with an LLM agent fallback is Phase 3.)
+- `core/agent` is the fallback: three tools and nothing else —
+  `read_file`, `write_file`, `run_build` — offered to an `LlmClient`
+  through `AgentFixLoop`, which feeds it the build failure, applies
+  whatever it writes, reruns the build, and repeats up to
+  `UpgradeConfig.maxAgentIterations()`. If the cap is hit without a green
+  build, it reports exactly what was tried instead of claiming success.
+- `core/pipeline` wires all of it together: apply recipes, commit,
+  build-check, then — only if the build is still red and an agent is
+  configured — the agent-fix step, reporting `SUCCEEDED`/`PARTIAL`/`FAILED`
+  honestly throughout.
 
 Three realistic legacy Java 8 / Spring Boot 2.x Maven services live under
 `samples/` as upgrade fixtures, each independently buildable with its own
-test suite. One of them, `legacy-rest-service`, is also upgraded end-to-end
-by a real integration test — real JGit, a real `mvn rewrite:run`, a real
-`mvn clean verify` — no fakes.
+test suite. Two of them are upgraded end-to-end by real integration tests
+(real JGit, a real `mvn rewrite:run`, a real `mvn clean verify` — no fakes
+except the LLM itself): `legacy-rest-service` goes green on recipes alone,
+while `legacy-security-service` needs the agent fallback — OpenRewrite
+migrates its `WebSecurityConfigurerAdapter` to the `SecurityFilterChain`
+style but leaves the in-memory user builder incomplete (no password/role),
+which a scripted `FakeLlmClient` then reads, fixes, and rebuilds to green.
 
-The LLM agent loop, the API, the dashboard, and the Terraform infra land in
-the sessions that follow.
+The API, the dashboard, and the Terraform infra land in the sessions that
+follow.
 
 ## Repository layout
 
