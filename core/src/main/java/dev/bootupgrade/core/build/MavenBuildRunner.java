@@ -15,11 +15,12 @@ import java.util.regex.Pattern;
  */
 public final class MavenBuildRunner {
 
-    /** Matches a module's aggregated Surefire summary line, e.g. "Tests run: 5, Failures: 0, Errors: 0, Skipped: 0".
+    /** Matches a module's aggregated Surefire summary line, e.g. "Tests run: 5, Failures: 0, Errors: 0, Skipped: 0",
+     * with or without the "[INFO] " prefix that Maven prints in batch mode.
      * Deliberately excludes the per-class line (which carries a trailing ", Time elapsed: ..." suffix) by
      * requiring the whole trimmed line to match, so module totals are never double-counted. */
     private static final Pattern SUREFIRE_SUMMARY = Pattern.compile(
-            "Tests run: (\\d+), Failures: (\\d+), Errors: (\\d+), Skipped: (\\d+)");
+            "(?:\\[INFO\\]\\s+)?Tests run: (\\d+), Failures: (\\d+), Errors: (\\d+), Skipped: (\\d+)");
 
     private final ProcessRunner processRunner;
     private final String mvnExecutable;

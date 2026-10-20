@@ -73,4 +73,35 @@ class GitOperationsTest {
 
         assertThat(sha).isEmpty();
     }
+
+    @Test
+    void neverCommitsMavenBuildOutputEvenWithoutAGitignore(@TempDir Path repoPath) throws IOException {
+        Files.createDirectories(repoPath.resolve("src"));
+        Files.writeString(repoPath.resolve("src/A.java"), "class A {}");
+        GitOperations git = new GitOperations();
+        git.ensureInitialized(repoPath);
+        git.createBranch(repoPath, "upgrade");
+
+        Files.writeString(repoPath.resolve("src/A.java"), "class A { int x; }");
+        Files.createDirectories(repoPath.resolve("target/classes"));
+        Files.writeString(repoPath.resolve("target/classes/A.class"), "bytes");
+        assertThat(git.uncommittedChanges(repoPath)).containsExactly("src/A.java");
+
+        git.commitAll(repoPath, "change");
+
+        try (org.eclipse.jgit.api.Git jgit = org.eclipse.jgit.api.Git.open(repoPath.toFile())) {
+            org.eclipse.jgit.revwalk.RevCommit head = jgit.log().setMaxCount(1).call().iterator().next();
+            try (org.eclipse.jgit.treewalk.TreeWalk walk = new org.eclipse.jgit.treewalk.TreeWalk(jgit.getRepository())) {
+                walk.addTree(head.getTree());
+                walk.setRecursive(true);
+                java.util.List<String> paths = new java.util.ArrayList<>();
+                while (walk.next()) {
+                    paths.add(walk.getPathString());
+                }
+                assertThat(paths).containsExactly("src/A.java");
+            }
+        } catch (org.eclipse.jgit.api.errors.GitAPIException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 }
