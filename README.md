@@ -37,13 +37,11 @@ cap and honestly reported failure:
 
 ## Project Status
 
-This project is being built across 5 working sessions, in public. See
-**[PROGRESS.md](PROGRESS.md)** for the full architecture, the phased build
-plan, and exactly where the project currently stands.
-
-**Current phase: Phase 4 — API + Dashboard, complete.** On top of the
-Phase 3 recipe → build-check → agent-fix pipeline, upgrade runs are now
-persisted and browsable:
+**STATUS: COMPLETE.** This project was built across 5 working sessions, in
+public. See **[PROGRESS.md](PROGRESS.md)** for the full architecture and
+phased build plan, and **[DAILY_REPORT.md](DAILY_REPORT.md)** for a summary
+of what was built each session, full test results, known limitations, and
+future ideas.
 
 - `core/recipes` runs the actual `rewrite-maven-plugin` (the
   `UpgradeSpringBoot_3_0` composite recipe) against a target repository —
@@ -64,12 +62,18 @@ persisted and browsable:
   configured — the agent-fix step, reporting `SUCCEEDED`/`PARTIAL`/`FAILED`
   honestly throughout.
 - `api` is a Spring Boot 3 REST API that persists runs and steps (H2
-  in-memory by default, a Postgres-driven `prod` profile for later ECS
-  deployment) and serves them back: list runs, a run's full detail, and a
-  success-rate aggregation overall and per repository.
+  in-memory by default, a Postgres-driven `prod` profile for the ECS
+  deployment `infra/` provisions) and serves them back: list runs, a run's
+  full detail, and a success-rate aggregation overall and per repository.
 - `dashboard` is an Angular app against that API: a runs list with the
   success-rate summary, and a run-detail view with every step, its kind,
   status, and diff summary.
+- `infra` is Terraform provisioning the whole thing on AWS: ECS Fargate
+  running the `api` behind an ALB, RDS Postgres (credentials generated into
+  Secrets Manager, never a plain variable), and S3 + CloudFront serving the
+  built `dashboard`. Validated with `terraform fmt`/`validate` and 19
+  `terraform test` cases against a mocked AWS provider — never applied
+  against a real account. See **[infra/README.md](infra/README.md)**.
 
 Three realistic legacy Java 8 / Spring Boot 2.x Maven services live under
 `samples/` as upgrade fixtures, each independently buildable with its own
@@ -81,16 +85,28 @@ migrates its `WebSecurityConfigurerAdapter` to the `SecurityFilterChain`
 style but leaves the in-memory user builder incomplete (no password/role),
 which a scripted `FakeLlmClient` then reads, fixes, and rebuilds to green.
 
-The Terraform infra and final polish land in the session that follows.
+### Test suite
+
+| Module | Tests | Notes |
+|---|---|---|
+| `core` | 104/104 | unit + real OpenRewrite/Maven/JGit integration tests |
+| `api` | 10/10 | against a real H2 in-memory database, no mocking |
+| `dashboard` | 17/17 | headless Karma/Jasmine (`ChromeHeadlessCI`) |
+| `samples/legacy-rest-service` | 13/13 | |
+| `samples/legacy-jpa-service` | 13/13 | |
+| `samples/legacy-security-service` | 6/6 | |
+| `infra` (`terraform test`) | 19/19 | 4 module suites + 1 cross-module integration suite, mocked AWS provider |
+
+182 checks total, all green.
 
 ## Repository layout
 
 ```
 core/        Java 21 library: domain model, LLM client, recipes, build runner, git, pipeline
 samples/     Realistic legacy Java 8 / Spring Boot 2.x Maven services used as upgrade fixtures
-api/         Spring Boot 3 REST API persisting upgrade runs & steps
+api/         Spring Boot 3 REST API persisting upgrade runs & steps (+ Dockerfile)
 dashboard/   Angular app: runs, step diffs, success rate across repos
-infra/       Terraform: ECS Fargate, RDS, S3 + CloudFront
+infra/       Terraform: ECS Fargate, RDS, S3 + CloudFront — see infra/README.md
 docs/        Documentation assets (screenshots, etc.)
 ```
 
@@ -126,6 +142,20 @@ npm ci
 npm test   # headless Karma/Jasmine, mocked HTTP
 npm start  # serves on :4200, talks to the API on :8080
 ```
+
+`infra` is validated without touching a real AWS account — only dummy
+credentials exist in this environment, and `terraform apply`/AWS CLI calls
+are never run here:
+
+```
+cd infra
+terraform fmt -check -recursive
+terraform init && terraform validate
+terraform test   # 19 cases against a mocked AWS provider, root + each module
+```
+
+See [infra/README.md](infra/README.md) for the module breakdown and why
+`terraform plan`/`apply` are deliberately out of scope here.
 
 ## License
 
