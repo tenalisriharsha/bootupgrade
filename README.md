@@ -19,15 +19,31 @@ The LLM client sits behind an interface with a deterministic fake used in
 tests and CI, so the whole pipeline is testable without network access or
 API keys.
 
+## Preview
+
+The dashboard (`dashboard/`, calling `api/`) showing real recorded upgrade
+runs — a clean recipe-only success, an agent fix that failed within its
+retry budget, one that succeeded, and a run that exhausted its iteration
+cap and honestly reported failure:
+
+| | |
+|---|---|
+| ![Runs list with success-rate summary](docs/screenshots/runs-list.png) | ![Run detail: recipes-only success](docs/screenshots/run-detail-succeeded.png) |
+| Runs list — overall success rate, per-repo breakdown, and the runs table | Run detail — `legacy-rest-service`, green on OpenRewrite recipes alone |
+| ![Run detail: agent fix still failing](docs/screenshots/run-detail-partial.png) | ![Run detail: agent fix succeeded](docs/screenshots/run-detail-agent-fix-succeeded.png) |
+| Run detail — `legacy-security-service`, agent fix attempt 1 still red | Run detail — same repo, a later run where the agent fix goes green |
+| ![Run detail: failed after iteration cap](docs/screenshots/run-detail-failed.png) | |
+| Run detail — `legacy-rest-service`, iteration cap reached, reported honestly as failed | |
+
 ## Project Status
 
 This project is being built across 5 working sessions, in public. See
 **[PROGRESS.md](PROGRESS.md)** for the full architecture, the phased build
 plan, and exactly where the project currently stands.
 
-**Current phase: Phase 3 — LLM Agent Loop, complete.** On top of the Phase 2
-recipe → build-check pipeline, `core` now has the tool-limited LLM agent
-fallback that closes the gap recipes can't:
+**Current phase: Phase 4 — API + Dashboard, complete.** On top of the
+Phase 3 recipe → build-check → agent-fix pipeline, upgrade runs are now
+persisted and browsable:
 
 - `core/recipes` runs the actual `rewrite-maven-plugin` (the
   `UpgradeSpringBoot_3_0` composite recipe) against a target repository —
@@ -47,6 +63,13 @@ fallback that closes the gap recipes can't:
   build-check, then — only if the build is still red and an agent is
   configured — the agent-fix step, reporting `SUCCEEDED`/`PARTIAL`/`FAILED`
   honestly throughout.
+- `api` is a Spring Boot 3 REST API that persists runs and steps (H2
+  in-memory by default, a Postgres-driven `prod` profile for later ECS
+  deployment) and serves them back: list runs, a run's full detail, and a
+  success-rate aggregation overall and per repository.
+- `dashboard` is an Angular app against that API: a runs list with the
+  success-rate summary, and a run-detail view with every step, its kind,
+  status, and diff summary.
 
 Three realistic legacy Java 8 / Spring Boot 2.x Maven services live under
 `samples/` as upgrade fixtures, each independently buildable with its own
@@ -58,8 +81,7 @@ migrates its `WebSecurityConfigurerAdapter` to the `SecurityFilterChain`
 style but leaves the in-memory user builder incomplete (no password/role),
 which a scripted `FakeLlmClient` then reads, fixes, and rebuilds to green.
 
-The API, the dashboard, and the Terraform infra land in the sessions that
-follow.
+The Terraform infra and final polish land in the session that follows.
 
 ## Repository layout
 
@@ -85,6 +107,24 @@ built the same way:
 ```
 cd samples/legacy-rest-service
 mvn test
+```
+
+`api` is a standalone Spring Boot 3 Maven project (no compile dependency on
+`core` — a pipeline run reports into it over HTTP):
+
+```
+cd api
+mvn test          # runs against a real H2 in-memory database
+mvn spring-boot:run  # serves on :8080
+```
+
+`dashboard` is a standalone Angular app:
+
+```
+cd dashboard
+npm ci
+npm test   # headless Karma/Jasmine, mocked HTTP
+npm start  # serves on :4200, talks to the API on :8080
 ```
 
 ## License
