@@ -1,0 +1,14 @@
+# Copy to dev.tfvars (gitignored) and fill in a real container image before
+# ever pointing this at a real AWS account/credentials.
+
+aws_region   = "us-east-1"
+environment  = "dev"
+project_name = "bootupgrade"
+
+api_image         = "123456789012.dkr.ecr.us-east-1.amazonaws.com/bootupgrade-api:latest"
+api_desired_count = 1
+api_cpu           = 512
+api_memory        = 1024
+
+db_instance_class    = "db.t4g.micro"
+db_allocated_storage = 20
