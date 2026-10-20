@@ -47,8 +47,9 @@ bootupgrade/
 │   ├── recipes/                OpenRewrite recipe runner wrapper (shells out to rewrite-maven-plugin)
 │   ├── build/                  Maven build/test runner invoked against target repos
 │   ├── git/                    JGit-backed branch creation, commit-per-step, changed-path reporting
-│   ├── pipeline/                recipe → commit → build-check orchestration
-│   └── agent/                  (Phase 3) tool-limited LLM agent loop + guardrails
+│   ├── pipeline/                recipe → commit → build-check → agent-fix orchestration
+│   └── agent/                   tool-limited LLM agent loop + guardrails
+│                                 (ReadFileTool, WriteFileTool, RunBuildTool, AgentFixLoop)
 │
 ├── samples/                   Realistic legacy fixtures (Java 8 / Spring Boot 2.x, Maven)
 │   ├── legacy-rest-service/    Plain REST CRUD service (javax.servlet, javax.validation)
@@ -101,6 +102,43 @@ bootupgrade/
   build-check — and reports `SUCCEEDED`/`PARTIAL`/`FAILED` based on what
   actually happened, never a false success
 
+### LLM agent fallback (Phase 3)
+
+- `AgentTool`: interface for the three (and only three) things the agent can
+  do — `read_file`, `write_file`, `run_build`. Each implementation never
+  throws; failures (bad path, missing argument, path traversal, build
+  failure) come back as a failed `ToolResult` string fed to the LLM, not an
+  exception.
+- `ReadFileTool` / `WriteFileTool`: read/overwrite a UTF-8 file at a path
+  relative to the repo root; reject any path that resolves outside the repo
+  (`RepoPaths.resolveWithinRepo`).
+- `RunBuildTool`: wraps `MavenBuildRunner.runVerify`, truncating very long
+  output to its tail so one bad build can't blow out the LLM's context.
+- `AgentFixLoop`: the retry loop itself. Builds a system+user prompt from
+  the initial failing `BuildResult`, offers only the tools in
+  `UpgradeConfig.allowedToolNames()`, and for each `LlmResponse` either
+  executes the requested tool (feeding the result back as a `TOOL` message
+  and looping) or, for a plain-text response, stops immediately and reports
+  that as the agent's reason for giving up. A `run_build` call that
+  succeeds ends the loop with `AgentFixResult.fixed(...)`; hitting
+  `maxAgentIterations` without one ends it with `AgentFixResult.notFixed(...)`
+  naming exactly how many iterations were spent and the full tool-call log —
+  never a false green.
+- `UpgradePipeline` wires it in: a 4-arg constructor takes an optional
+  `AgentFixLoop` (`null` disables it, preserving Phase 2 behavior exactly).
+  When the post-recipe build is red and an agent is configured with
+  `maxAgentIterations() > 0`, the pipeline runs it, commits whatever it
+  changed either way, and adds an `AGENT_FIX` step before deciding
+  `SUCCEEDED` vs `PARTIAL`.
+- Proven against a real fixture, not just mocks: `legacy-security-service`'s
+  `SecurityConfig` is migrated by OpenRewrite to the `SecurityFilterChain`
+  style but left with an incomplete `InMemoryUserDetailsManager` user
+  builder (no password/role — throws at context-startup), and
+  `UpgradePipelineAgentFixIntegrationTest` drives the real recipe runner and
+  real Maven build against a copy of that fixture, with a `FakeLlmClient`
+  scripted to read `SecurityConfig.java`, write the corrected version, and
+  rerun the build — ending in a genuinely green `mvn clean verify`.
+
 ## Build Plan
 
 This project is built across **5 sessions**. Each session is a full working
@@ -151,20 +189,20 @@ session, not a quick pass — foundation first, polish and previews last.
   implementations end to end — the OpenRewrite/Maven Central dependencies
   it needs resolve and cache in well under a minute.
 
-### Phase 3 — LLM Agent Loop (Session 3)
-- [ ] Tool-limited agent loop (`core/agent`): read file, write file, run build —
+### Phase 3 — LLM Agent Loop (Session 3) ✅
+- [x] Tool-limited agent loop (`core/agent`): read file, write file, run build —
       nothing else, with a max-iteration guardrail
-- [ ] Wire the agent into the pipeline as the fallback after recipes +
+- [x] Wire the agent into the pipeline as the fallback after recipes +
       build-check fail
-- [ ] Retry loop: agent fix → rebuild → repeat until green or iteration cap hit
-- [ ] On cap hit: structured report of exactly what could not be fixed (no
+- [x] Retry loop: agent fix → rebuild → repeat until green or iteration cap hit
+- [x] On cap hit: structured report of exactly what could not be fixed (no
       silent "success")
-- [ ] Changelog + PR description generation finalized, covering both recipe
+- [x] Changelog + PR description generation finalized, covering both recipe
       steps and agent-fix steps
-- [ ] At least one sample service upgraded end-to-end (Java 8/Boot 2 →
+- [x] At least one sample service upgraded end-to-end (Java 8/Boot 2 →
       Java 21/Boot 3) via the full pipeline, driven by `FakeLlmClient`, as an
       integration test
-- [ ] Tests green, conventional commits, PROGRESS.md updated
+- [x] Tests green, conventional commits, PROGRESS.md updated
 
 ### Phase 4 — API + Dashboard (Session 4)
 - [ ] `api`: Spring Boot 3 REST API persisting `UpgradeRun`/`UpgradeStep`
@@ -192,33 +230,34 @@ session, not a quick pass — foundation first, polish and previews last.
 
 ## Resume point
 
-**Session 2 complete.** Phase 2 is fully done: `core/recipes`, `core/build`,
-`core/git`, and `core/pipeline` are implemented and tested (80/80 tests
-green in `core`), the 3 legacy sample services are real, independently
-buildable Maven projects with their own passing test suites, and one of
-them is upgraded end-to-end by a real (no-fakes) integration test. CI now
-builds `core` plus all 3 samples.
+**Session 3 complete.** Phase 3 is fully done: `core/agent` (`AgentTool`,
+`ReadFileTool`, `WriteFileTool`, `RunBuildTool`, `AgentFixLoop`,
+`AgentFixResult`) is implemented and tested, `UpgradePipeline` wires it in
+as the fallback via a new 4-arg constructor (the old 3-arg one still works
+unchanged, agent disabled), and `legacy-security-service` is upgraded
+end-to-end through recipes → still-red build → agent fix → green build in
+a real (no-fakes-but-the-LLM) integration test. `core` is at 103/103 tests
+green. CI is unchanged (already runs `core` plus all 3 samples; the new
+agent tests and the new integration test run as part of `mvn test`).
 
-**Start session 3 here:**
-1. `cd core && mvn test` to confirm the Phase 2 baseline is still green
-   (should be fast — well under a minute, including the real integration
-   test, since Maven Central deps are already cached under `~/.m2`).
-2. Build the tool-limited LLM agent loop (`core/agent`): read file, write
-   file, run build — nothing else — with a max-iteration guardrail, per the
-   Phase 3 checklist below.
-3. Wire the agent into `UpgradePipeline` as the fallback when the build is
-   still red after the recipe step (`UpgradePipeline.applyRecipes`/
-   `checkBuild` in `core/pipeline/UpgradePipeline.java` is where the retry
-   loop plugs in — right now a red build after recipes just gets reported
-   as `PARTIAL`).
-4. Drive at least one sample through the full pipeline (recipes → agent fix
-   → green build) in an integration test using `FakeLlmClient` with a
-   scripted fix — `legacy-security-service`'s `WebSecurityConfigurerAdapter`
-   config is the fixture built specifically for this (OpenRewrite can't
-   migrate it automatically; see `samples/legacy-security-service/pom.xml`'s
-   description and `SecurityConfig.java`'s javadoc).
-5. Finalize changelog/PR description generation to cover agent-fix steps too
-   (`ChangelogWriter` already renders any `UpgradeStep`, so this is mostly
-   about the agent loop producing good `UpgradeStep` descriptions/diffs).
+**Start session 4 here:**
+1. `cd core && mvn test` to confirm the Phase 3 baseline is still green
+   (should be well under a minute including both real integration tests,
+   since Maven Central deps are already cached under `~/.m2`).
+2. Build the `api` module: Spring Boot 3 REST API persisting `UpgradeRun`/
+   `UpgradeStep` via Spring Data JPA. Use H2 in-memory for tests and the
+   Postgres driver for prod config — no Testcontainers/Docker (the daemon
+   isn't running in this environment). `core`'s `UpgradeRun`/`UpgradeStep`/
+   `RunStatus`/`StepStatus`/`StepKind` records are the shape to persist;
+   decide whether the API maps them to JPA `@Entity` classes directly or
+   via separate DTOs (records with constructor validation don't map
+   cleanly to JPA's no-arg-constructor expectation, so entities will likely
+   need their own mutable classes with a mapper to/from the `core` records).
+3. API endpoints per the Phase 4 checklist: list runs, run detail (steps +
+   diffs), success-rate aggregation across repos.
+4. Build the `dashboard` Angular app: runs list, run detail view (steps,
+   diffs), success-rate summary, calling the API.
+5. API integration tests against the in-memory H2 DB, Angular unit tests.
+6. Tests green, conventional commits, PROGRESS.md updated.
 
 STATUS: IN_PROGRESS
