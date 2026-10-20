@@ -2,34 +2,21 @@ mock_provider "aws" {
   override_data {
     target = module.ecs.data.aws_iam_policy_document.ecs_tasks_assume_role
     values = {
-      json = jsonencode({
-        Version = "2012-10-17"
-        Statement = [{
-          Effect    = "Allow"
-          Action    = "sts:AssumeRole"
-          Principal = { Service = "ecs-tasks.amazonaws.com" }
-        }]
-      })
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"}}]}"
     }
   }
 
   override_data {
     target = module.ecs.data.aws_iam_policy_document.read_db_secret
     values = {
-      json = jsonencode({
-        Version   = "2012-10-17"
-        Statement = [{ Effect = "Allow", Action = "secretsmanager:GetSecretValue", Resource = "*" }]
-      })
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"secretsmanager:GetSecretValue\",\"Resource\":\"*\"}]}"
     }
   }
 
   override_data {
     target = module.dashboard_site.data.aws_iam_policy_document.dashboard_bucket_policy
     values = {
-      json = jsonencode({
-        Version   = "2012-10-17"
-        Statement = [{ Effect = "Allow", Action = "s3:GetObject", Principal = { Service = "cloudfront.amazonaws.com" } }]
-      })
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"s3:GetObject\",\"Principal\":{\"Service\":\"cloudfront.amazonaws.com\"}}]}"
     }
   }
 
