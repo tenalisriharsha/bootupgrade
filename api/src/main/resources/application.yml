@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: bootupgrade-api
+  datasource:
+    url: jdbc:h2:mem:bootupgrade;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+server:
+  port: 8080
+
+---
+# Production profile: real Postgres, driven entirely by environment variables.
+# Activate with --spring.profiles.active=prod (e.g. the ECS task definition in infra/).
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: ${DB_URL}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
