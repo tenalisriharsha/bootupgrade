@@ -2,15 +2,7 @@ mock_provider "aws" {
   override_data {
     target = data.aws_iam_policy_document.dashboard_bucket_policy
     values = {
-      json = jsonencode({
-        Version = "2012-10-17"
-        Statement = [{
-          Sid       = "AllowCloudFrontRead"
-          Effect    = "Allow"
-          Action    = "s3:GetObject"
-          Principal = { Service = "cloudfront.amazonaws.com" }
-        }]
-      })
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"AllowCloudFrontRead\",\"Effect\":\"Allow\",\"Action\":\"s3:GetObject\",\"Principal\":{\"Service\":\"cloudfront.amazonaws.com\"}}]}"
     }
   }
 }
