@@ -1,0 +1,35 @@
+<section class="rate-card">
+  <div class="hero">
+    <div class="hero-number">{{ overallPct }}%</div>
+    <div class="hero-caption">
+      overall success rate
+      <span class="hero-sub">{{ summary.succeededRuns }} of {{ summary.totalRuns }} runs succeeded</span>
+    </div>
+  </div>
+
+  <div class="legend" *ngIf="summary.byRepository.length">
+    <span class="legend-item"><span class="dot" style="background: var(--status-good)"></span>Succeeded</span>
+    <span class="legend-item"><span class="dot" style="background: var(--status-warning)"></span>Partial</span>
+    <span class="legend-item"><span class="dot" style="background: var(--status-critical)"></span>Failed</span>
+  </div>
+
+  <div class="repo-rows" *ngIf="summary.byRepository.length; else noRuns">
+    <div class="repo-row" *ngFor="let repo of summary.byRepository">
+      <div class="repo-name">{{ repo.repositoryName }}</div>
+      <div class="bar-track">
+        <div
+          class="bar-segment"
+          *ngFor="let seg of segmentsFor(repo)"
+          [style.width.%]="seg.widthPct"
+          [style.background]="'var(' + seg.cssVar + ')'"
+          [attr.aria-label]="seg.label"
+        ></div>
+      </div>
+      <div class="repo-count">{{ repo.succeededRuns }}/{{ repo.totalRuns }}</div>
+    </div>
+  </div>
+
+  <ng-template #noRuns>
+    <p class="empty">No runs recorded yet.</p>
+  </ng-template>
+</section>

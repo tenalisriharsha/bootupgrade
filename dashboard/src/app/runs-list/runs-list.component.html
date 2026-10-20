@@ -1,0 +1,37 @@
+<div class="page">
+  <h1>Upgrade runs</h1>
+
+  <app-success-rate *ngIf="successRate" [summary]="successRate" class="rate-block"></app-success-rate>
+
+  <p *ngIf="errorMessage" class="error">{{ errorMessage }}</p>
+
+  <p *ngIf="loading && !errorMessage" class="muted">Loading runs…</p>
+
+  <table *ngIf="!loading && runs.length" class="runs-table">
+    <thead>
+      <tr>
+        <th>Repository</th>
+        <th>Status</th>
+        <th>Java</th>
+        <th>Spring Boot</th>
+        <th>Steps</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let run of runs" [routerLink]="['/runs', run.id]" class="run-row">
+        <td>{{ run.repositoryName }}</td>
+        <td><app-status-badge [status]="run.status"></app-status-badge></td>
+        <td>{{ run.sourceJavaVersion }} → {{ run.targetJavaVersion }}</td>
+        <td>{{ run.sourceSpringBootVersion }} → {{ run.targetSpringBootVersion }}</td>
+        <td>{{ run.succeededStepCount }}/{{ run.totalSteps }} succeeded</td>
+        <td>{{ run.createdAt | date: 'MMM d, y HH:mm' }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p *ngIf="!loading && !runs.length && !errorMessage" class="muted">
+    No upgrade runs recorded yet. Run the bootupgrade CLI against a repository and report it to the API to see it
+    here.
+  </p>
+</div>
