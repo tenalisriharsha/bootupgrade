@@ -2,28 +2,14 @@ mock_provider "aws" {
   override_data {
     target = data.aws_iam_policy_document.ecs_tasks_assume_role
     values = {
-      json = jsonencode({
-        Version = "2012-10-17"
-        Statement = [{
-          Effect    = "Allow"
-          Action    = "sts:AssumeRole"
-          Principal = { Service = "ecs-tasks.amazonaws.com" }
-        }]
-      })
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"}}]}"
     }
   }
 
   override_data {
     target = data.aws_iam_policy_document.read_db_secret
     values = {
-      json = jsonencode({
-        Version = "2012-10-17"
-        Statement = [{
-          Effect   = "Allow"
-          Action   = "secretsmanager:GetSecretValue"
-          Resource = "arn:aws:secretsmanager:us-east-1:123456789012:secret:bootupgrade-dev-db-credentials-xyz"
-        }]
-      })
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"secretsmanager:GetSecretValue\",\"Resource\":\"arn:aws:secretsmanager:us-east-1:123456789012:secret:bootupgrade-dev-db-credentials-xyz\"}]}"
     }
   }
 
