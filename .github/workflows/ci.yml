@@ -73,3 +73,37 @@ jobs:
       - name: Production build
         working-directory: dashboard
         run: npx ng build
+
+  infra:
+    name: infra (Terraform)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.5"
+      - name: fmt
+        working-directory: infra
+        run: terraform fmt -check -recursive
+      - name: init (root)
+        working-directory: infra
+        run: terraform init -input=false
+      - name: validate (root)
+        working-directory: infra
+        run: terraform validate
+      # No real AWS account/credentials exist in CI, so `plan`/`apply`
+      # aren't run here — `terraform test` below exercises every module
+      # (and the root module's cross-module wiring) against a mocked
+      # provider instead, which needs no credentials at all.
+      - name: test (root — cross-module wiring)
+        working-directory: infra
+        run: terraform test
+      - name: test (each module)
+        working-directory: infra
+        run: |
+          set -e
+          for m in network rds ecs static_site; do
+            echo "::group::module $m"
+            (cd "modules/$m" && terraform init -input=false && terraform test)
+            echo "::endgroup::"
+          done
