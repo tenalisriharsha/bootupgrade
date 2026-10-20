@@ -62,7 +62,7 @@ run "api_task_security_group_only_allows_alb_on_container_port" {
   }
 
   assert {
-    condition     = alltrue([for rule in aws_security_group.api_task.ingress : rule.cidr_blocks == null || length(rule.cidr_blocks) == 0])
+    condition     = alltrue([for rule in aws_security_group.api_task.ingress : try(length(rule.cidr_blocks), 0) == 0])
     error_message = "The api task security group must restrict ingress to the ALB security group, never a CIDR block"
   }
 }
