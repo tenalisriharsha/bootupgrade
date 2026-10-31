@@ -26,7 +26,9 @@ java -jar target/bootupgrade.jar /tmp/legacy-rest-service --out /tmp/reports
 ```
 
 That creates a `bootupgrade/<name>-<id>` branch in the project, applies the recipes, commits, builds, and writes
-`bootupgrade-<name>-changelog.md` and `bootupgrade-<name>-pr.md` to `--out`.
+`bootupgrade-<name>-changelog.md` and `bootupgrade-<name>-pr.md` to `--out`. The target repository must have a clean
+working tree: if it already has uncommitted changes, the recipe step fails fast rather than folding that pre-existing
+work into the upgrade commit.
 
 | Option | Meaning |
 |---|---|
