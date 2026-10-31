@@ -18,7 +18,13 @@ jobs:
           cache: maven
       - name: Build and test core
         working-directory: core
-        run: mvn -B test
+        run: mvn -B package
+      - name: Smoke-test the packaged CLI
+        working-directory: core
+        run: |
+          output="$(java -jar target/bootupgrade.jar || true)"
+          echo "$output"
+          echo "$output" | grep -q "bootupgrade"
 
   samples:
     name: samples (${{ matrix.sample }})
