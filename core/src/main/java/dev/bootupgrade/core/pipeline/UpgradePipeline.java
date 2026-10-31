@@ -101,6 +101,12 @@ public final class UpgradePipeline {
                 "Apply OpenRewrite recipes",
                 StepKind.RECIPE,
                 "javax->jakarta rename and Spring Boot 2->3 config/property migration");
+        List<String> preExistingChanges = gitOperations.uncommittedChanges(config.repositoryPath());
+        if (!preExistingChanges.isEmpty()) {
+            return step.markFailed(config.repositoryPath() + " has uncommitted changes: "
+                    + String.join(", ", preExistingChanges)
+                    + "; commit or stash them before running bootupgrade");
+        }
         RecipeResult result = recipeRunner.run(config.repositoryPath());
         if (!result.success()) {
             return step.markFailed("recipe run failed (exit " + result.exitCode() + ")");
