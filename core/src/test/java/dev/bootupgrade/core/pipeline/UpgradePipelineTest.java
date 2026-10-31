@@ -103,6 +103,30 @@ class UpgradePipelineTest {
     }
 
     @Test
+    void preExistingUncommittedChangesAreNotAttributedToTheRecipeStep(@TempDir Path repoPath) throws IOException {
+        Files.writeString(repoPath.resolve("pom.xml"), "<project/>");
+        GitOperations git = new GitOperations();
+        git.ensureInitialized(repoPath);
+        Files.writeString(repoPath.resolve("MyWipFeature.java"), "class MyWipFeature {}");
+
+        RecipeRunner recipeRunner = new RecipeRunner(alwaysReturning(new ProcessResult(0, "no changes", "", false)));
+        MavenBuildRunner buildRunner = new MavenBuildRunner(alwaysReturning(new ProcessResult(0, "BUILD SUCCESS", "", false)));
+        UpgradePipeline pipeline = new UpgradePipeline(git, recipeRunner, buildRunner);
+
+        UpgradeRun run = pipeline.run(configFor(repoPath), "my-service", "8", "2.7.18");
+
+        assertThat(run.status()).isEqualTo(RunStatus.FAILED);
+        assertThat(run.steps()).hasSize(1);
+        assertThat(run.steps().get(0).kind()).isEqualTo(StepKind.RECIPE);
+        assertThat(run.steps().get(0).status()).isEqualTo(StepStatus.FAILED);
+        assertThat(run.steps().get(0).diffSummary())
+                .contains("MyWipFeature.java")
+                .contains("uncommitted changes")
+                .doesNotContain("file(s) changed");
+        assertThat(git.uncommittedChanges(repoPath)).containsExactly("MyWipFeature.java");
+    }
+
+    @Test
     void aFailedRecipeRunIsReportedAsFailedRegardlessOfTheBuild(@TempDir Path repoPath) throws IOException {
         Files.writeString(repoPath.resolve("pom.xml"), "<project/>");
         GitOperations git = new GitOperations();
