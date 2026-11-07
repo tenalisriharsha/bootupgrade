@@ -1,5 +1,6 @@
 package dev.bootupgrade.core.cli;
 
+import dev.bootupgrade.core.git.GitOperations;
 import dev.bootupgrade.core.model.RunStatus;
 import dev.bootupgrade.core.model.StepKind;
 import dev.bootupgrade.core.model.UpgradeRun;
@@ -29,7 +30,11 @@ class AppTest {
     }
 
     private Path mavenProject(String javaVersion, String bootVersion) throws IOException {
-        Path project = Files.createDirectory(tmp.resolve("demo-service"));
+        return mavenProject("demo-service", javaVersion, bootVersion);
+    }
+
+    private Path mavenProject(String dirName, String javaVersion, String bootVersion) throws IOException {
+        Path project = Files.createDirectory(tmp.resolve(dirName));
         Files.writeString(project.resolve("pom.xml"), """
                 <project>
                   <parent>
@@ -113,5 +118,30 @@ class AppTest {
 
         assertThat(exitCode).isZero();
         assertThat(output()).contains("warning: could not report to http://127.0.0.1:9");
+    }
+
+    @Test
+    void aProjectPathThatMakesGitRejectTheBranchNameIsReportedAsFailedNotARawStackTrace() throws IOException {
+        // A directory name with a space in it (same as a real checkout like "/tmp/legacy rest service")
+        // produces a branch name JGit refuses to create, exactly as the real pipeline would build one:
+        // "bootupgrade/" + repositoryName + "-" + runId. Driving that failure through a real GitOperations
+        // call (not a hand-built exception) exercises the exact GitOperationException the issue reports.
+        Path project = mavenProject("legacy rest service", "8", "2.7.18");
+        GitOperations git = new GitOperations();
+        git.ensureInitialized(project);
+
+        App.UpgradeExecutor executor = (config, name, java, boot) -> {
+            git.createBranch(project, "bootupgrade/" + name + "-5d447f7a");
+            throw new AssertionError("createBranch should have thrown before this point");
+        };
+
+        int exitCode = App.run(
+                new String[] {project.toString(), "--out", tmp.resolve("o").toString()}, out, executor);
+
+        assertThat(exitCode).isEqualTo(3);
+        assertThat(output())
+                .contains("error:")
+                .doesNotContain("Exception in thread")
+                .doesNotContain("\tat ");
     }
 }
