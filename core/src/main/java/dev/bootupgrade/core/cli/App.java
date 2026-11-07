@@ -90,7 +90,13 @@ public final class App {
                 + ", Spring Boot " + source.springBoot() + " -> " + config.targetSpringBootVersion());
         out.println();
 
-        UpgradeRun result = executor.execute(config, name, source.java(), source.springBoot());
+        UpgradeRun result;
+        try {
+            result = executor.execute(config, name, source.java(), source.springBoot());
+        } catch (RuntimeException e) {
+            out.println("error: " + e.getMessage());
+            return 3;
+        }
 
         for (UpgradeStep step : result.steps()) {
             out.println(String.format("  [%-9s] %-26s %s", step.status(), step.name(), firstLine(step.diffSummary())));
