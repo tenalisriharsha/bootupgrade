@@ -30,6 +30,9 @@ import java.util.UUID;
  */
 public final class UpgradePipeline {
 
+    /** Recipe-run output beyond this many trailing lines is dropped from the failure message. */
+    private static final int MAX_RECIPE_OUTPUT_LINES = 40;
+
     private final GitOperations gitOperations;
     private final RecipeRunner recipeRunner;
     private final MavenBuildRunner buildRunner;
@@ -109,7 +112,8 @@ public final class UpgradePipeline {
         }
         RecipeResult result = recipeRunner.run(config.repositoryPath());
         if (!result.success()) {
-            return step.markFailed("recipe run failed (exit " + result.exitCode() + ")");
+            return step.markFailed("recipe run failed (exit " + result.exitCode() + "):\n"
+                    + tailLines(result.output(), MAX_RECIPE_OUTPUT_LINES));
         }
         List<String> changedFiles = gitOperations.uncommittedChanges(config.repositoryPath());
         if (changedFiles.isEmpty()) {
@@ -117,6 +121,15 @@ public final class UpgradePipeline {
         }
         gitOperations.commitAll(config.repositoryPath(), "bootupgrade: apply OpenRewrite recipes");
         return step.markSucceeded(changedFiles.size() + " file(s) changed: " + String.join(", ", changedFiles));
+    }
+
+    private static String tailLines(String text, int maxLines) {
+        List<String> lines = text.lines().toList();
+        if (lines.size() <= maxLines) {
+            return String.join("\n", lines);
+        }
+        List<String> kept = lines.subList(lines.size() - maxLines, lines.size());
+        return "... (truncated, showing the last " + maxLines + " lines)\n" + String.join("\n", kept);
     }
 
     private UpgradeStep buildStepFor(String runId, BuildResult result) {
