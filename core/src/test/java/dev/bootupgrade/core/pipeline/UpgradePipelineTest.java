@@ -143,6 +143,30 @@ class UpgradePipelineTest {
     }
 
     @Test
+    void recipeFailureMessageIncludesTheActualMavenErrorNotJustTheExitCode(@TempDir Path repoPath)
+            throws IOException {
+        Files.writeString(repoPath.resolve("pom.xml"), "<project/>");
+        GitOperations git = new GitOperations();
+        git.ensureInitialized(repoPath);
+
+        String mavenError = "[ERROR] No plugin found for prefix 'rewrite' in the current project and in the "
+                + "plugin groups [org.springframework.boot] available from the repositories "
+                + "[local (~/.m2/repository), central (https://repo.maven.apache.org/maven2)] -> [Help 1]";
+        RecipeRunner recipeRunner = new RecipeRunner(alwaysReturning(new ProcessResult(1, "", mavenError, false)));
+        MavenBuildRunner buildRunner = new MavenBuildRunner(alwaysReturning(new ProcessResult(0, "BUILD SUCCESS", "", false)));
+        UpgradePipeline pipeline = new UpgradePipeline(git, recipeRunner, buildRunner);
+
+        UpgradeRun run = pipeline.run(configFor(repoPath), "my-service", "8", "2.7.18");
+
+        assertThat(run.status()).isEqualTo(RunStatus.FAILED);
+        assertThat(run.steps().get(0).diffSummary())
+                .withFailMessage(
+                        "expected the real Maven error to be surfaced instead of just the exit code, got: %s",
+                        run.steps().get(0).diffSummary())
+                .contains("No plugin found for prefix 'rewrite'");
+    }
+
+    @Test
     void agentFixLoopFixesAStillRedBuildAndTheRunSucceeds(@TempDir Path repoPath) throws IOException {
         Files.writeString(repoPath.resolve("pom.xml"), "<project/>");
         Files.writeString(repoPath.resolve("Broken.java"), "class Broken {}");
