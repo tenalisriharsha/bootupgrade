@@ -62,7 +62,7 @@ public final class UpgradePipeline {
         Objects.requireNonNull(sourceSpringBootVersion, "sourceSpringBootVersion must not be null");
 
         String runId = UUID.randomUUID().toString();
-        String branchName = "bootupgrade/" + repositoryName + "-" + runId.substring(0, 8);
+        String branchName = "bootupgrade/" + sanitizeForBranchName(repositoryName) + "-" + runId.substring(0, 8);
         UpgradeRun run = UpgradeRun.start(
                 runId,
                 repositoryName,
@@ -121,6 +121,19 @@ public final class UpgradePipeline {
         }
         gitOperations.commitAll(config.repositoryPath(), "bootupgrade: apply OpenRewrite recipes");
         return step.markSucceeded(changedFiles.size() + " file(s) changed: " + String.join(", ", changedFiles));
+    }
+
+    /**
+     * Replaces characters illegal in a git ref name (whitespace and the other
+     * characters JGit/git reject) with {@code -}, so a directory basename such
+     * as {@code "legacy rest service"} produces a usable branch name instead of
+     * failing branch creation outright.
+     */
+    private static String sanitizeForBranchName(String name) {
+        String sanitized = name.replaceAll("[^A-Za-z0-9._-]", "-")
+                .replaceAll("-{2,}", "-")
+                .replaceAll("^[.-]+|[.-]+$", "");
+        return sanitized.isEmpty() ? "repo" : sanitized;
     }
 
     private static String tailLines(String text, int maxLines) {
