@@ -244,6 +244,26 @@ class UpgradePipelineTest {
     }
 
     @Test
+    void aRepositoryNameContainingASpaceStillSucceeds(@TempDir Path repoPath) throws IOException {
+        // Issue #15: the branch name is built from the directory basename with no sanitization
+        // ("bootupgrade/" + repositoryName + "-" + runId), so a checkout like "/tmp/legacy rest service"
+        // produces a branch name JGit rejects, and the run fails outright even though the project
+        // itself (recipes + build, faked here) is perfectly fine.
+        Files.writeString(repoPath.resolve("pom.xml"), "<project/>");
+        GitOperations git = new GitOperations();
+        git.ensureInitialized(repoPath);
+
+        RecipeRunner recipeRunner = new RecipeRunner(alwaysReturning(new ProcessResult(0, "no changes", "", false)));
+        MavenBuildRunner buildRunner = new MavenBuildRunner(alwaysReturning(new ProcessResult(0, "BUILD SUCCESS", "", false)));
+        UpgradePipeline pipeline = new UpgradePipeline(git, recipeRunner, buildRunner);
+
+        UpgradeRun run = pipeline.run(configFor(repoPath), "legacy rest service", "8", "2.7.18");
+
+        assertThat(run.status()).isEqualTo(RunStatus.SUCCEEDED);
+        assertThat(run.branchName()).doesNotContain(" ");
+    }
+
+    @Test
     void rejectsNullArguments(@TempDir Path repoPath) {
         GitOperations git = new GitOperations();
         RecipeRunner recipeRunner = new RecipeRunner(alwaysReturning(new ProcessResult(0, "", "", false)));
